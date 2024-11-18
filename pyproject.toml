@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[project]
+name = "backups-logrotate"
+version = "0.0.1"
+dependencies = [ ]
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT License"}
+description = "kind of like logrotate, but for backups"
+keywords = ["backup", "database", "rotate"]
+authors = [
+  {name = "Thierry Parmentelat", email = "thierry.parmentelat@inria.fr"},
+]
+
+# [project.optional-dependencies]
+# gui = ["PyQt5"]
+# cli = [
+#   "click",
+# ]
+
+[tool.hatch.build.targets.wheel]
+packages = [ "backups_rotate" ]
+
+
+[project.urls]
+Repository = "https://github.com/parmentelat/backups-rotate"
+"Bug Tracker" = "https://github.com/parmentelat/backups-rotate/issues"
+# Homepage = "https://example.com"
+# Documentation = "https://readthedocs.org"
+# Changelog = "https://github.com/me/spam/blob/master/CHANGELOG.md"
+
+
+# [project.scripts]
+# backups-rotate = "backups_rotate.cli:cli"
