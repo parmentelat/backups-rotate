@@ -12,20 +12,10 @@ from tests.areas import *
 from tests.policies import *
 
 
-TEST_FOLDER = Path("/tmp/test-backups-rotate")
-if not TEST_FOLDER.exists():
-    TEST_FOLDER.mkdir()
-
-
-def test_broken_area0():
-    with pytest.raises(ValueError):
-        Area(BROKEN_AREAS[0])
-def test_broken_area1():
-    with pytest.raises(ValueError):
-        Area(BROKEN_AREAS[1])
-def test_broken_area2():
-    with pytest.raises(ValueError):
-        Area(BROKEN_AREAS[2])
+def test_broken_areas():
+    for area_dict in BROKEN_AREAS:
+        with pytest.raises(ValueError):
+            Area(area_dict)
 
 
 def test_datetime_format():
@@ -34,13 +24,15 @@ def test_datetime_format():
     ts = extract_date_from_filename(path, datetime_format)
     assert ts == pd.Timestamp("2024-01-01")
 
-def test_attach_timestamp1():
+
+def test_attach_timestamp_by_format():
     path = Path("database-2024-01-01-something.sql")
     tp = TimedPath(path)
     tp.attach_timestamp(datetime_format="%Y-%m-%d")
     assert tp.timestamp == pd.Timestamp("2024-01-01")
 
-def test_attach_timestamp2():
+
+def test_attach_timestamp_by_ctime():
     path = TEST_FOLDER / "--some-test-file--"
     if path.exists():
         path.unlink()
@@ -50,9 +42,11 @@ def test_attach_timestamp2():
     tp.attach_timestamp()
     assert (tp.timestamp - now) < pd.Timedelta(milliseconds=50)
 
-def test_attach_timestamp3():
+
+def test_attach_timestamp_mydb_area():
     files = ALL_FILES
-    folder = TEST_FOLDER / "planetlab"
+    area_dict = MYDB_AREA
+    folder = Path(area_dict['folder'])
     if not folder.exists():
         folder.mkdir()
     for file in folder.glob("*"):
@@ -61,8 +55,25 @@ def test_attach_timestamp3():
         path = folder / file
         path.touch()
 
-    area_dict = PLANETLAB_AREA
-    area_dict['folder'] = str(folder)
-    area_dict['policy'] = POLICY10
     area = Area(area_dict)
-    area.clean()
+    area.read()
+    assert area.deleted == 53
+
+
+def test_attach_timestamp_another_area():
+    files = ALL_FILES
+    area_dict = ANOTHER_AREA
+    folder = Path(area_dict['folder'])
+    if not folder.exists():
+        folder.mkdir()
+    for file in folder.glob("*"):
+        file.unlink()
+    for file in files:
+        path = folder / file
+        path.touch()
+
+    area = Area(area_dict)
+    area.read()
+    # because this area uses modification time, only one file
+    # survives in this test
+    assert area.deleted == 61

@@ -1,0 +1,33 @@
+---
+# this defines the area named "database" that can be used
+# on the command line to specify what needs to be cleaned up
+
+- name: mydb
+  folder: /tmp/test-backups-rotate/mydb/
+  patterns:
+    - "mydb*.sql"
+    - "mydb*.sql.gz"
+  policy:
+    year: infinite
+    quarter: 3
+    month: 2
+    week: 4
+    day: 5
+    hour: 6
+  # optionally, you can specify the format of the timestamp in the file name
+  datetime_format: "%Y-%m-%d-%H-%M-%S"
+  # OR, still optionally, you can specify to use the modification time
+  # instead of the creation time
+    # use_modification_time: true
+
+- name: another
+  folder: /tmp/test-backups-rotate/mydb/
+  patterns:
+    - "another*.sql"
+  policy:
+    year: 1
+    quarter: 1
+    month: 1
+    week: 1
+    day: 3
+    hour: 3

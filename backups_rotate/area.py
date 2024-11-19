@@ -7,6 +7,7 @@ together with a policy
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
+from collections.abc import Iterator
 
 import pandas as pd
 
@@ -32,7 +33,7 @@ def extract_date_from_filename(path: Path, dateformat) -> pd.Timestamp | None:
     for i in range(len(filename) - partial_length + 1):
         substring = filename[i:i + partial_length]
         try:
-            print(substring)
+            # print(substring)
             return pd.Timestamp(datetime.strptime(substring, dateformat))
         except ValueError:
             continue
@@ -91,6 +92,7 @@ class Area:
         except KeyError as e:
             raise ValueError(f"Missing key {e}") from e
         self.datetime_format = area_dict.get('datetime_format', None)
+        self.use_modification_time = area_dict.get('use_modification_time', None)
         # for the record
         self.area_dict = area_dict
         # stats
@@ -98,19 +100,20 @@ class Area:
         self.deleted = 0
         # list of TimedPath
         self._files = None
+        self._kept = None
         # sanity check
-        self.check()
+        self._check()
 
     def __repr__(self):
         return f"Area({self.name} on {self.path} - {self.total} files, {self.deleted} deleted)"
 
-    def check(self):
+    def _check(self):
         """
         sanity check
         """
         # no need to check for mandatory fields
         # as they are used in the constructor already
-        allowed = set("name|folder|patterns|policy|datetime_format".split("|"))
+        allowed = set("name|folder|patterns|policy|datetime_format|use_modification_time".split("|"))
         # any non-supported key ? this can be dangerous
         unsupported = set(self.area_dict.keys()) - allowed
         if unsupported:
@@ -118,6 +121,12 @@ class Area:
 
         if not isinstance(self.patterns, list):
             raise ValueError(f"Invalid patterns in {self.name} - should be a list")
+        if not isinstance(self.use_modification_time, (bool, type(None))):
+            raise ValueError(f"Invalid use_modification_time in {self.name} - should be a boolean")
+        if self.datetime_format is not None and not isinstance(self.datetime_format, str):
+            raise ValueError(f"Invalid datetime_format in {self.name} - should be a string")
+        if self.use_modification_time is not None and self.datetime_format is not None:
+            raise ValueError(f"Cannot have both use_modification_time and datetime_format {self.name}")
 
         # check the folder
         if not self.path.exists():
@@ -128,14 +137,7 @@ class Area:
             raise ValueError(f"{self.path} is not an absolute path")
 
 
-    def list(self):
-        """
-        list the files in the area
-        """
-        for file in self._files:
-            print(file)
-
-    def populate(self):
+    def _populate(self):
         """
         read the disk to populate the list of files
         """
@@ -145,34 +147,74 @@ class Area:
         self._files = [TimedPath(path) for path in self._files]
         self.total = len(self._files)
 
-    def time_files(self, *, datetime_format: str = None,
-                    use_modification_time: bool = False):
+    def _time_files(self):
         """
         attach a timestamp to each file
         """
         for file in self._files:
             file.attach_timestamp(
-                datetime_format=datetime_format,
-                use_modification_time=use_modification_time)
+                datetime_format=self.datetime_format,
+                use_modification_time=self.use_modification_time)
         # use TimedPath __lt__ to sort by timestamp
         self._files.sort()
 
-    def clean(self, *, dry_run=True,
-                use_modification_time: bool = False):
+    def read(self):
         """
-        apply the policy to the files in the area
+        read the disk and computes which files to keep
         """
-        self.populate()
-        datetime_format = self.datetime_format
-        self.time_files(datetime_format=datetime_format,
-                        use_modification_time=use_modification_time)
-        kept = self.policy.keep_timestamps([
+        self._populate()
+        self._time_files()
+        self._kept = self.policy.keep_timestamps([
             file.timestamp for file in self._files])
         self.deleted = 0
         for i, file in enumerate(self._files):
-            if not kept[i]:
+            if not self._kept[i]:
                 self.deleted += 1
+
+
+    def _iterate(self) -> Iterator[tuple[bool, Path, pd.Timestamp]]:
+        """
+        iterate on tuples (path: Path, kept: bool)
+        """
+        if self._kept is None:
+            print("warning: area not read yet - bailing out")
+            return
+        for i, file in enumerate(self._files):
+            yield (self._kept[i], file.path, file.timestamp)
+
+
+    def list(self, *, deleted=True, kept=True):
+        """
+        shows the files in the area, with an indication of kept/deleted
+        """
+        if self._files is None:
+            print("warning: area not populated yet")
+            return
+        if self._kept is None:
+            print("warning: area not read yet - showing all files")
+            for file in self._files:
+                print(file)
+            return
+        for kept_file, file, ts in self._iterate():
+            # show only selected entries
+            if (deleted and not kept_file) or (kept and kept_file):
+                print("KEEP" if kept_file else "DELE", end=" ")
+                print(file, ts)
+
+    def delete(self, *, dry_run=True, verbose=False):
+        """
+        delete the files in the area
+        """
+        for kept_file, file, _ts in self._iterate():
+            if kept_file:
                 if dry_run:
-                    print(f"dry-run: would delete file {file}")
-                else:
-                    file.unlink()
+                    print("dry-run: would KEEP  ", file)
+                continue
+            if dry_run:
+                print("dry-run: would DELETE", file)
+            elif not file.exists():
+                print("MISSING", file)
+            else:
+                if verbose:
+                    print("DELETING", file)
+                file.unlink()

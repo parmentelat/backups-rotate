@@ -27,18 +27,18 @@ pip install backups-rotate
 
 The tool comes with 6 predefined "periods": `year`, `quarter`, `month`, `week`, `day`, `hour`.
 
-You define your policy in a YAML file, like e.g (for the policy described above):
+You define your folder and policy in a YAML file, like e.g (for the policy described above):
 
 ```yaml
 ---
 # this defines the area named "database" that can be used
-# on the command line to specify the area to be inspected / cleaned up
+# on the command line to specify what needs to be cleaned up
 
 - name: database
   folder: /usr/lib/backups
   patterns:
-    - "*.sql"
-    - "*.tar.gz"
+    - "mydb*.sql"
+    - "mydb*.sql.gz"
   policy:
     year: infinite
     quarter: 3
@@ -46,6 +46,11 @@ You define your policy in a YAML file, like e.g (for the policy described above)
     week: 4
     day: 5
     hour: 6
+  # optionally, you can specify the format of the timestamp in the file name
+    # datetime_format: "%Y-%m-%d_%H-%M-%S"
+  # OR, still optionally, you can specify to use the modification time
+  # instead of the creation time
+    # use_modification_time: true
 ```
 
 ## Usage
@@ -62,13 +67,16 @@ backups-rotate database
 # not doing anything, just showing what would be done
 backups-rotate database --dry-run
 
+# do it, and be verbose about it
+backups-rotate database --verbose
+
 # using a config file (default is /etc/backups-logrotate.yaml)
 backups-rotate --config my_policy.yaml database
 ```
 
 which will remove, from the specified folder, all backups that are older than the policy you defined.
 
-## Actual behaviour
+## How policies are implemented
 
 When run on a specific area, the tool will:
 
@@ -80,7 +88,7 @@ When run on a specific area, the tool will:
     - take the most recent file and mark it as kept
   - then list (if dry-run) or remove (if not dry-run) all files that are not marked as kept
 
-## Example
+### Example
 
 Based on `sample2()` in `tests/samples.py`, assume you have one file per hour between
 `2024-01-01 00:00` and `2024-11-15 23:00`, then applying the policy above would keep:
@@ -123,16 +131,17 @@ noting that the following 2 were already kept for quarter:
 2024-09-30 23:00
 ```
 
-## Timestamps
+### Timestamps
 
 By default, time is taken from the file's creation time. If you want to use the
-file's modification time instead, you can use the `--use-modification-time`
-option.
+file's modification time instead, you can use the `use-modification-time`
+flag in your yaml config.
 
-Also if your files are named with a timestamp, you can use the
-`--datetime-format` option to specify the format of the timestamp in the file
-name (using Python's `datetime` format); files that do not match the format will
-be ignored - and thus preserved.
+Also if your files are named with a timestamp, you can use the `datetime-format`
+option to specify the format of the timestamp in the file name (using Python's
+`datetime` format); files that do not match the format will cause an error.
+
+This means you can use either 
 
 ## Tests
 
