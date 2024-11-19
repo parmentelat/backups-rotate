@@ -1,4 +1,10 @@
-import random
+"""
+should be called timestamps.py
+"""
+
+# pylint: disable=invalid-name
+
+# import random
 import pandas as pd
 
 SAMPLE1_raw = [
@@ -74,7 +80,7 @@ def sample1() -> list[pd.Timestamp]:
             raise ValueError("Invalid shuffle string")
         return [samples[i] for i in shuffle]
     except IndexError as e:
-        raise ValueError("Invalid shuffle", e)
+        raise ValueError("Invalid shuffle") from e
 
 
 # this has 7705 entries

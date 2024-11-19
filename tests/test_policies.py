@@ -1,9 +1,11 @@
-from unittest import TestCase
+# pylint: disable=missing-docstring, wildcard-import, multiple-statements
+
+# from unittest import TestCase
 
 from backups_rotate import Policy
 
-from samples import *
-from policies import *
+from tests.samples import *
+from tests.policies import *
 
 
 # the generic method is to compare the output of the policy

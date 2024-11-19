@@ -1,3 +1,8 @@
+"""
+the Policy class is in charge of spotting the timestamps that are to be kept
+"""
+
+
 import numpy as np
 import pandas as pd
 
@@ -45,11 +50,11 @@ class Policy:
         the timestamp qualifies to be kept
         """
 
-        N = len(timestamps)
-        kept = np.zeros(N, dtype=np.uint8)
+        total = len(timestamps)
+        kept = np.zeros(total, dtype=np.uint8)
 
         index = pd.DatetimeIndex(timestamps)
-        rank = range(N)
+        rank = range(total)
         df = pd.DataFrame(rank, index=index, columns=['rank'])
 
         df.sort_index(inplace=True)
@@ -67,9 +72,9 @@ class Policy:
                         f"Invalid value for {period}: {value} - should be >= 1")
                 last_per_period = last_per_period.iloc[-value:]
             last_per_period = last_per_period.astype(int)
-            print("===", period)
-            for rank in last_per_period['rank']:
-                print(rank, timestamps[rank])
+            # print("===", period)
+            # for rank in last_per_period['rank']:
+            #     print(rank, timestamps[rank])
             # mark the items to be kept
             kept[last_per_period['rank']] += 1
 
@@ -87,5 +92,3 @@ class Policy:
         return the indices of the timestamps to keep
         """
         return np.nonzero(self.keep_timestamps(timestamps))[0].tolist()
-
-

@@ -1,3 +1,5 @@
+# pylint: disable=missing-docstring
+
 POLICY1 = {
     'hour': 'infinite',
 }

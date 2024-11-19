@@ -9,6 +9,7 @@ You run a website with a database, and you want to backup your database every da
 ## What it does
 
 You can define a policy on several frequency levels, e.g.
+
 - one per year - no matter how far back in time
 - and/or, keep one backup for each of the last 3 quarters
 - and/or, the last 2 months
@@ -35,7 +36,7 @@ You define your policy in a YAML file, like e.g (for the policy described above)
 
 - name: database
   folder: /usr/lib/backups
-  files:
+  patterns:
     - "*.sql"
     - "*.tar.gz"
   policy:
@@ -81,7 +82,7 @@ When run on a specific area, the tool will:
 
 ## Example
 
-Based on `sample2()` in `tests/samples.py`, assume you have one file per hour between 
+Based on `sample2()` in `tests/samples.py`, assume you have one file per hour between
 `2024-01-01 00:00` and `2024-11-15 23:00`, then applying the policy above would keep:
 
 ```text
@@ -115,7 +116,7 @@ if instead the policy was defined with `month: infinite`, then the policy would 
 2024-08-31 23:00
 ```
 
-noting that the follwing 2 were already kept for quarter:
+noting that the following 2 were already kept for quarter:
 
 ```text
 2024-06-30 23:00
@@ -129,7 +130,7 @@ file's modification time instead, you can use the `--use-modification-time`
 option.
 
 Also if your files are named with a timestamp, you can use the
-`--timestamp-format` option to specify the format of the timestamp in the file
+`--datetime-format` option to specify the format of the timestamp in the file
 name (using Python's `datetime` format); files that do not match the format will
 be ignored - and thus preserved.
 
