@@ -70,7 +70,7 @@ backups-rotate database --dry-run
 # do it, and be verbose about it
 backups-rotate database --verbose
 
-# using a config file (default is /etc/backups-logrotate.yaml)
+# using a config file (default is /etc/backups-rotate.yaml)
 backups-rotate --config my_policy.yaml database
 ```
 
