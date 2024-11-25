@@ -2,9 +2,7 @@
 
 You run a website with a database, and you want to backup your database every day, and keep the last 7 days of backups. This script will do that for you.
 
-## WORK IN PROGRESS
-
-***not yet published on pypi***
+Contrary to logrotate, where contents is aassumed to be **appended** to files, here we assume all the files are **full backups**; and that each backup is independant from the others. So the job is not to rename files, but to remove the old ones.
 
 ## What it does
 
@@ -46,11 +44,29 @@ You define your folder and policy in a YAML file, like e.g (for the policy descr
     week: 4
     day: 5
     hour: 6
-  # optionally, you can specify the format of the timestamp in the file name
+
+# by default the time attaached to each file is its creation time
+# optionally, you can specify the format of the timestamp 
+# in the file name, like so:
     # datetime_format: "%Y-%m-%d_%H-%M-%S"
-  # OR, still optionally, you can specify to use the modification time
-  # instead of the creation time
+# in that case, files that do not match the format will be ignored
+
+# OR, still optionally, you can specify to use the modification time
+# instead of the creation time
     # use_modification_time: true
+
+# you define as many areas as you want
+- name: builds
+  folder: /usr/lib/builds
+  patterns:
+    - "myapp*"
+  # type can be either folder, file or symlink
+  # by default all files are considered
+  type: folder
+  policy:
+    month: 4
+    week: 3
+    day: 4
 ```
 
 ## Usage
@@ -61,20 +77,31 @@ Here are a few ways to run the tool
 # run on all areas
 backups-rotate
 
+# using a config file (default is /etc/backups-rotate.yaml, and ./backups-rotate.yaml)
+backups-rotate --config my_policy.yaml database
+
 # on a specific area
 backups-rotate database
 
+# on a specific area; list the files considered
+# you can use -l instead of --list
+backups-rotate database --list
+
+# same in verbose mode
+# you can use -v instead of --verbose
+backups-rotate database --list --verbose
+
+# same but only shows what would be deleted
+# you can use -d instead of --deleted
+backups-rotate database --list --deleted
+
 # not doing anything, just showing what would be done
+# you can use -n instead of --dry-run
 backups-rotate database --dry-run
 
-# do it, and be verbose about it
+# do it (i.e. remove the selected files), and be verbose about it
 backups-rotate database --verbose
-
-# using a config file (default is /etc/backups-rotate.yaml)
-backups-rotate --config my_policy.yaml database
 ```
-
-which will remove, from the specified folder, all backups that are older than the policy you defined.
 
 ## How policies are implemented
 
@@ -139,9 +166,7 @@ flag in your yaml config.
 
 Also if your files are named with a timestamp, you can use the `datetime-format`
 option to specify the format of the timestamp in the file name (using Python's
-`datetime` format); files that do not match the format will cause an error.
-
-This means you can use either 
+`datetime` format).
 
 ## Tests
 

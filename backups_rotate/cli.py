@@ -21,6 +21,12 @@ DEFAULT_CONFIG_FILE = "/etc/backups-rotate.yaml"
     help="List areas",
 )
 @click.option(
+    "--list-deleted",
+    "-d",
+    is_flag=True,
+    help="list only files to be deleted",
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -33,7 +39,7 @@ DEFAULT_CONFIG_FILE = "/etc/backups-rotate.yaml"
     help="Dry run",
 )
 @click.argument('area_names', nargs=-1)
-def cli(config, list, verbose, dry_run, area_names):
+def cli(config, list, list_deleted, verbose, dry_run, area_names):
     """
     backups_rotate: a tool to manage backups
     """
@@ -79,7 +85,8 @@ def cli(config, list, verbose, dry_run, area_names):
         if verbose:
             click.echo(f"area={area}")
         if list:
-            area.list(verbose=verbose)
+            kept = not list_deleted
+            area.list(verbose=verbose, kept=kept)
         else:
             area.delete(dry_run=dry_run, verbose=verbose)
 

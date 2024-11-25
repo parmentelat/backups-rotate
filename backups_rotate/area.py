@@ -100,6 +100,8 @@ class Area:
     """
 
     def __init__(self, area_dict: dict):
+
+        # mandatory fields
         try:
             self.name = area_dict['name']
             self.path = Path(area_dict['folder'])
@@ -107,6 +109,8 @@ class Area:
             self.policy = Policy(area_dict['policy'])
         except KeyError as e:
             raise ValueError(f"Missing key {e}") from e
+
+        # optional fields
         self.datetime_format = area_dict.get('datetime_format', None)
         if 'use_creation_time' in area_dict and 'use_modification_time' in area_dict:
             raise ValueError(f"area {name}: cannot have both use_creation_time and use_modification_time")
@@ -116,13 +120,15 @@ class Area:
             self.use_modification_time = not area_dict['use_creation_time']
         else:
             self.use_modification_time = None
+        self.type_ = area_dict.get('type', None)
+
         # for the record
         self.area_dict = area_dict
         # stats
         self.total = 0
         self.deleted = 0
         # list of TimedPath
-        self._files = None
+        self._timed_paths = None
         self._kept = None
         # sanity check
         self._check()
@@ -137,7 +143,7 @@ class Area:
         # no need to check for mandatory fields
         # as they are used in the constructor already
         allowed = set("name|folder|patterns|policy|datetime_format"
-                      "|use_creation_time|use_modification_time".split("|"))
+                      "|use_creation_time|use_modification_time|type".split("|"))
         # any non-supported key ? this can be dangerous
         unsupported = set(self.area_dict.keys()) - allowed
         if unsupported:
@@ -151,6 +157,8 @@ class Area:
             raise ValueError(f"area {self.name}: invalid datetime_format in - should be a string")
         if self.use_modification_time is not None and self.datetime_format is not None:
             raise ValueError(f"area {self.name}: cannot have both use_modification_time and datetime_format {self.name}")
+        if self.type_ is not None and self.type_ not in ("file", "folder", "symlink"):
+            raise ValueError(f"area {self.name}: invalid type {self.type_}")
 
         # check the folder
         if not self.path.exists():
@@ -165,22 +173,33 @@ class Area:
         """
         read the disk to populate the list of files
         """
-        self._files = []
+        self._timed_paths = []
         for pattern in self.patterns:
-            self._files.extend(self.path.glob(pattern))
-        self._files = [TimedPath(path) for path in self._files]
-        self.total = len(self._files)
+            self._timed_paths.extend(self.path.glob(pattern))
+        self._timed_paths = [TimedPath(path) for path in self._timed_paths]
+        match self.type_:
+            case "file":
+                self._timed_paths = [tp for tp in self._timed_paths if tp.path.is_file()]
+            case "folder":
+                self._timed_paths = [tp for tp in self._timed_paths if tp.path.is_dir()]
+            case "symlink":
+                self._timed_paths = [tp for tp in self._timed_paths if tp.path.is_symlink()]
+        self.total = len(self._timed_paths)
 
     def _attach_timestamp_to_files(self):
         """
         attach a timestamp to each file
         """
-        for file in self._files:
-            file.attach_timestamp(
-                datetime_format=self.datetime_format,
-                use_modification_time=self.use_modification_time)
+        for file in self._timed_paths[::]:
+            try:
+                file.attach_timestamp(
+                    datetime_format=self.datetime_format,
+                    use_modification_time=self.use_modification_time)
+            except ValueError as e:
+                print(f"WARNING: area {self.name} - ignoring file {file.path}: {e}")
+                self._timed_paths.remove(file)
         # use TimedPath __lt__ to sort by timestamp
-        self._files.sort()
+        self._timed_paths.sort()
 
     def read(self):
         """
@@ -189,9 +208,9 @@ class Area:
         self._populate()
         self._attach_timestamp_to_files()
         self._kept = self.policy.keep_timestamps([
-            file.timestamp for file in self._files])
+            file.timestamp for file in self._timed_paths])
         self.deleted = 0
-        for i, file in enumerate(self._files):
+        for i, file in enumerate(self._timed_paths):
             if not self._kept[i]:
                 self.deleted += 1
 
@@ -203,7 +222,7 @@ class Area:
         if self._kept is None:
             print("warning: area not read yet - bailing out")
             return
-        for i, file in enumerate(self._files):
+        for i, file in enumerate(self._timed_paths):
             yield (self._kept[i], file.path, file.timestamp)
 
 
@@ -211,12 +230,12 @@ class Area:
         """
         shows the files in the area, with an indication of kept/deleted
         """
-        if self._files is None:
+        if self._timed_paths is None:
             print("warning: area not populated yet")
             return
         if self._kept is None:
             print("warning: area not read yet - showing all files")
-            for file in self._files:
+            for file in self._timed_paths:
                 print(file)
             return
         for kept_file, file, ts in self._iterate():
