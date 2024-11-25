@@ -14,7 +14,7 @@ import pandas as pd
 from .policy import Policy
 
 
-def extract_date_from_filename(path: Path, dateformat) -> pd.Timestamp | None:
+def extract_date_from_string(filename: str, dateformat: str) -> pd.Timestamp | None:
     """
     Extracts a date from a filename using the provided date format.
 
@@ -25,7 +25,6 @@ def extract_date_from_filename(path: Path, dateformat) -> pd.Timestamp | None:
     Returns:
         datetime: The extracted date if found, None otherwise.
     """
-    filename = path.name
     # we need to know how many characters to try and match
     dummy = datetime(2000, 1, 1, 0, 0, 0)
     partial_length = len(dummy.strftime(dateformat))
@@ -38,6 +37,23 @@ def extract_date_from_filename(path: Path, dateformat) -> pd.Timestamp | None:
         except ValueError:
             continue
     return None
+
+
+def extract_date_from_path(path: Path, dateformat: str) -> pd.Timestamp | None:
+    """
+    Extracts a date from a path using the provided date format.
+    First tries name, then its parent, until one is found.
+
+    Args:
+        path (Path): The path to search for a date.
+        dateformat (str): A strptime-compliant date format to match.
+
+    Returns:
+        datetime: The extracted date if found, None otherwise.
+    """
+    for f in path.absolute().parts[::-1]:
+        if date := extract_date_from_string(f, dateformat):
+            return date
 
 
 @dataclass
@@ -63,12 +79,12 @@ class TimedPath:
         # no format
         if datetime_format is None:
             if use_modification_time:
-                self.timestamp = pd.Timestamp(self.path.stat().st_mtime)
+                self.timestamp = pd.Timestamp(self.path.stat().st_mtime, unit='s')
             else:
-                self.timestamp = pd.Timestamp(self.path.stat().st_ctime)
+                self.timestamp = pd.Timestamp(self.path.stat().st_ctime, unit='s')
             return
         # otherwise use the format
-        date = extract_date_from_filename(self.path, datetime_format)
+        date = extract_date_from_path(self.path, datetime_format)
         if date is None:
             raise ValueError(
                 f"Could not extract date from {self.path} using {datetime_format}")
@@ -92,7 +108,14 @@ class Area:
         except KeyError as e:
             raise ValueError(f"Missing key {e}") from e
         self.datetime_format = area_dict.get('datetime_format', None)
-        self.use_modification_time = area_dict.get('use_modification_time', None)
+        if 'use_creation_time' in area_dict and 'use_modification_time' in area_dict:
+            raise ValueError(f"area {name}: cannot have both use_creation_time and use_modification_time")
+        elif 'use_modification_time' in area_dict:
+            self.use_modification_time = area_dict['use_modification_time']
+        elif 'use_creation_time' in area_dict:
+            self.use_modification_time = not area_dict['use_creation_time']
+        else:
+            self.use_modification_time = None
         # for the record
         self.area_dict = area_dict
         # stats
@@ -113,20 +136,21 @@ class Area:
         """
         # no need to check for mandatory fields
         # as they are used in the constructor already
-        allowed = set("name|folder|patterns|policy|datetime_format|use_modification_time".split("|"))
+        allowed = set("name|folder|patterns|policy|datetime_format"
+                      "|use_creation_time|use_modification_time".split("|"))
         # any non-supported key ? this can be dangerous
         unsupported = set(self.area_dict.keys()) - allowed
         if unsupported:
             raise ValueError(f"Invalid keys in {self.name} : {unsupported}")
 
         if not isinstance(self.patterns, list):
-            raise ValueError(f"Invalid patterns in {self.name} - should be a list")
+            raise ValueError(f"area {self.name}: invalid patterns, should be a list")
         if not isinstance(self.use_modification_time, (bool, type(None))):
-            raise ValueError(f"Invalid use_modification_time in {self.name} - should be a boolean")
+            raise ValueError(f"area {self.name}: invalid use_modification_time - should be a boolean")
         if self.datetime_format is not None and not isinstance(self.datetime_format, str):
-            raise ValueError(f"Invalid datetime_format in {self.name} - should be a string")
+            raise ValueError(f"area {self.name}: invalid datetime_format in - should be a string")
         if self.use_modification_time is not None and self.datetime_format is not None:
-            raise ValueError(f"Cannot have both use_modification_time and datetime_format {self.name}")
+            raise ValueError(f"area {self.name}: cannot have both use_modification_time and datetime_format {self.name}")
 
         # check the folder
         if not self.path.exists():
@@ -147,7 +171,7 @@ class Area:
         self._files = [TimedPath(path) for path in self._files]
         self.total = len(self._files)
 
-    def _time_files(self):
+    def _attach_timestamp_to_files(self):
         """
         attach a timestamp to each file
         """
@@ -163,7 +187,7 @@ class Area:
         read the disk and computes which files to keep
         """
         self._populate()
-        self._time_files()
+        self._attach_timestamp_to_files()
         self._kept = self.policy.keep_timestamps([
             file.timestamp for file in self._files])
         self.deleted = 0
@@ -183,7 +207,7 @@ class Area:
             yield (self._kept[i], file.path, file.timestamp)
 
 
-    def list(self, *, deleted=True, kept=True):
+    def list(self, *, deleted=True, kept=True, verbose=False):
         """
         shows the files in the area, with an indication of kept/deleted
         """
@@ -198,23 +222,38 @@ class Area:
         for kept_file, file, ts in self._iterate():
             # show only selected entries
             if (deleted and not kept_file) or (kept and kept_file):
-                print("KEEP" if kept_file else "DELE", end=" ")
-                print(file, ts)
+                status = "KEEP" if kept_file else "DELE"
+                if not verbose:
+                    print(file)
+                else:
+                    ts_str = ts.strftime("%Y-%m-%d %H:%M:%S")
+                    print(status, ts_str, file)
+        if verbose:
+            print(f"{self.deleted} files deleted out of {self.total}")
 
     def delete(self, *, dry_run=True, verbose=False):
         """
         delete the files in the area
         """
+        summary = {'kept': 0, 'deleted': 0, 'missing': 0}
         for kept_file, file, _ts in self._iterate():
             if kept_file:
+                summary['kept'] += 1
                 if dry_run:
                     print("dry-run: would KEEP  ", file)
                 continue
             if dry_run:
                 print("dry-run: would DELETE", file)
+                summary['deleted'] += 1
             elif not file.exists():
+                summary['missing'] += 1
                 print("MISSING", file)
             else:
+                summary['deleted'] += 1
                 if verbose:
                     print("DELETING", file)
                 file.unlink()
+        if verbose:
+            def item(k, v): return f"{v} {k} files"
+            chunks = [item(k, v) for k, v in summary.items() if v]
+            print(" / ".join(chunks))

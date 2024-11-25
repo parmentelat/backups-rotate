@@ -1,9 +1,11 @@
+from pathlib import Path
+
 import click
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML, scanner
 
 from backups_rotate.area import Area
 
-DEFAULT_CONFIG_FILE = "/etc/backups_rotate.yaml"
+DEFAULT_CONFIG_FILE = "/etc/backups-rotate.yaml"
 
 @click.command()
 @click.option(
@@ -11,6 +13,12 @@ DEFAULT_CONFIG_FILE = "/etc/backups_rotate.yaml"
     "-c",
     default=DEFAULT_CONFIG_FILE,
     help="Configuration file",
+)
+@click.option(
+    "--list",
+    "-l",
+    is_flag=True,
+    help="List areas",
 )
 @click.option(
     "--verbose",
@@ -25,16 +33,32 @@ DEFAULT_CONFIG_FILE = "/etc/backups_rotate.yaml"
     help="Dry run",
 )
 @click.argument('area_names', nargs=-1)
-def cli(config, verbose, dry_run, area_names):
+def cli(config, list, verbose, dry_run, area_names):
     """
     backups_rotate: a tool to manage backups
     """
 
     # read the configuration
     yaml = YAML(typ='safe')
-    with open(config) as f:
-        config = yaml.load(f)
-        areas_by_name = {area["name"]: area for area in config}
+    candidates = [ Path(config), Path(".") / Path(config).name ]
+    for candidate in candidates:
+        if verbose:
+            click.echo(f"Trying to reading configuration from {candidate}")
+        if candidate.exists():
+            try:
+                with open(candidate) as f:
+                    config = yaml.load(f)
+                    areas_by_name = {area["name"]: area for area in config}
+                if verbose:
+                    click.echo(f"Configuration read from {candidate}")
+                break
+            except scanner.ScannerError as e:
+                click.echo(f"Error reading configuration from {candidate}: {e}")
+    else:
+        click.echo(f"Config file not found - exiting - have tried:")
+        for candidate in candidates:
+            click.echo(f"  {candidate.absolute()}")
+        return 1
 
     if not area_names:
         area_dicts = config
@@ -44,14 +68,19 @@ def cli(config, verbose, dry_run, area_names):
         except KeyError as e:
             click.echo(f"Area {e} not found in configuration")
             return 1
+    try:
+        areas = [Area(area_dict) for area_dict in area_dicts]
+    except ValueError as e:
+        click.echo(f"Error creating area: {e}")
+        return 1
 
-    areas = [Area(area_dict) for area_dict in area_dicts]
-
-    if verbose:
-        for area in areas:
-            area.read()
-            if verbose:
-                click.echo(f"area={area}")
+    for area in areas:
+        area.read()
+        if verbose:
+            click.echo(f"area={area}")
+        if list:
+            area.list(verbose=verbose)
+        else:
             area.delete(dry_run=dry_run, verbose=verbose)
 
 
